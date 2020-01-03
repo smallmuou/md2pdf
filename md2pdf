@@ -142,12 +142,34 @@ base_dir=/tmp/md2pdf
 src_file=$1
 dst_file=$2
 
-[ ! -f $src_file ] && { error "$src_file does not exist."; exit -1; }
-
 rm -rf $base_dir
 mkdir $base_dir
 
-cp $src_file $base_dir/README.md
+[ ! -f "$src_file" ] && { error "$src_file does not exist."; exit -1; }
+
+dir_name=`dirname "$src_file"`
+
+tmp_file=$base_dir/tmp.md
+tmp1_file=$base_dir/tmp1.md
+cp "$src_file" "$tmp_file"
+
+spushd $dir_name
+
+images=`cat $tmp_file|sed -n "s/!\[.*\](\(.*\))/\1/p"|awk '{print $1}'`
+
+for image in $images
+do
+    datafile=$base_dir/image.data
+    base64 $image > $datafile
+    image=`echo $image|sed 's#/#\\\/#g'`
+    perl -pe "s#\!\[.*\]\($image.*\)#==$image\n)#g" $tmp_file > $tmp1_file 
+    printf '%s\n' "/==$image/r $datafile" w | ed $tmp1_file > /dev/null
+    perl -pe "s#==$image\n#\!\[\]\(data:image\/png;base64,#g" $tmp1_file > $tmp_file
+done
+
+spopd
+
+cp $tmp_file $base_dir/README.md
 
 spushd $base_dir
 gitbook pdf
@@ -155,3 +177,4 @@ gs -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dFirstPage=2 -dCompatibilityLevel=1.4  -
 spopd
 
 mv $base_dir/1.pdf $2
+
